@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Schoolradar VWO</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div>
+          <h1>Schoolradar VWO</h1>
+          <p>DUO Open Onderwijsdata</p>
+        </div>
+      </div>
+
+      <form class="controls" id="filters">
+        <label class="search-field">
+          <span>Zoeken</span>
+          <input id="searchInput" name="q" type="search" autocomplete="off" placeholder="Postcode, plaats of school">
+        </label>
+
+        <label>
+          <span>Straal</span>
+          <select id="radiusSelect" name="radius">
+            <option value="0">Geen</option>
+            <option value="1">1 km</option>
+            <option value="2.5" selected>2.5 km</option>
+            <option value="5">5 km</option>
+            <option value="10">10 km</option>
+            <option value="20">20 km</option>
+          </select>
+        </label>
+
+        <label>
+          <span>Type</span>
+          <select id="typeSelect" name="type">
+            <option value="all">BO + SBO</option>
+            <option value="Bo">BO</option>
+            <option value="Sbo">SBO</option>
+          </select>
+        </label>
+
+        <label>
+          <span>Sorteren</span>
+          <select id="sortSelect" name="sort">
+            <option value="vwo" selected>VWO-ratio</option>
+            <option value="distance">Afstand</option>
+            <option value="satisfaction">Tevredenheid</option>
+          </select>
+        </label>
+
+        <label class="toggle">
+          <input id="includeHavoVwo" type="checkbox" checked>
+          <span>HAVO/VWO meetellen</span>
+        </label>
+      </form>
+    </header>
+
+    <main class="layout">
+      <section class="results-panel" aria-labelledby="resultsTitle">
+        <div class="panel-head">
+          <div>
+            <h2 id="resultsTitle">Scholen</h2>
+            <p id="resultSummary">Data laden...</p>
+          </div>
+          <div class="metric-pill" id="medianMetric">--</div>
+        </div>
+
+        <div class="stats-grid" id="statsGrid" aria-live="polite">
+          <div>
+            <strong>--</strong>
+            <span>gevonden</span>
+          </div>
+          <div>
+            <strong>--</strong>
+            <span>met ratio</span>
+          </div>
+          <div>
+            <strong>--</strong>
+            <span>met locatie</span>
+          </div>
+        </div>
+
+        <div class="list" id="schoolList"></div>
+      </section>
+
+      <section class="insight-panel" aria-label="Analyse">
+        <div class="visual-row">
+          <article class="visual-box map-box">
+            <div class="visual-head">
+              <div>
+                <h2>Kaart</h2>
+                <p id="mapStatus">Nederland</p>
+              </div>
+              <span class="source-badge" id="sourceBadge">DUO</span>
+            </div>
+            <div id="realMap" class="real-map"></div>
+            <canvas id="mapCanvas" class="map-fallback"></canvas>
+            <div class="legend" aria-hidden="true">
+              <span class="legend-dot low"></span>
+              <span>lager</span>
+              <span class="legend-line"></span>
+              <span>VWO-ratio</span>
+              <span class="legend-dot high"></span>
+              <span>hoger</span>
+            </div>
+          </article>
+
+          <article class="visual-box scatter-box">
+            <div class="visual-head">
+              <div>
+                <h2>Verdeling</h2>
+                <p>VWO-ratio per locatie</p>
+              </div>
+            </div>
+            <div id="distributionMap" class="real-map distribution-map"></div>
+            <canvas id="scatterCanvas" class="chart-fallback"></canvas>
+            <div class="distribution-note">
+              <span><i class="legend-line"></i>kleur = VWO-ratio, oranje lager tot groen hoger</span>
+              <span><i class="size-dot"></i>grootte = aantal leerlingen in het adviescohort</span>
+              <span><i class="legend-dot high"></i>elke stip = een school</span>
+            </div>
+          </article>
+        </div>
+
+        <article class="detail-panel" id="detailPanel">
+          <div>
+            <h2>Selecteer een school</h2>
+            <p>Klik op een school in de lijst of op een punt in de kaart.</p>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,5 @@
+data/raw/
+data/schools.json
+.edge-profile/
+*.pyc
+__pycache__/
