@@ -367,6 +367,11 @@ select {
   background: var(--surface-2);
 }
 
+.school-meta .quality-chip {
+  color: #7a3d16;
+  background: #fff2e8;
+}
+
 .origin-summary {
   display: grid;
   gap: 7px;

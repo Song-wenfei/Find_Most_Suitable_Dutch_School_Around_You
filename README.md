@@ -4,9 +4,10 @@ A static website for exploring Dutch primary schools with DUO Open Onderwijsdata
 
 The VWO ratio is calculated from DUO's `Schooladviezen` file:
 
-- default ratio: `(VWO + HAVO_VWO) / all definite final advice categories`
-- strict ratio: `VWO / all definite final advice categories`
+- default ratio: `VWO / all definite final advice categories`
+- optional broader ratio: `(VWO + HAVO_VWO) / all definite final advice categories`
 - DUO values published as `<5` are preserved as ranges, so the UI shows a percentage range when the exact count is privacy masked
+- VWO sorting uses the lower end of the percentage range first, so schools with small privacy-masked cohorts are ranked conservatively
 
 ## Data
 

@@ -156,7 +156,7 @@ const state = {
   radiusKm: 2.5,
   type: "all",
   sort: "vwo",
-  includeHavoVwo: true,
+  includeHavoVwo: false,
   center: null,
   centerSource: "",
   mapInstance: null,
@@ -283,7 +283,7 @@ function updateUrl() {
   params.set("radius", String(state.radiusKm));
   params.set("type", state.type);
   params.set("sort", state.sort);
-  if (!state.includeHavoVwo) params.set("includeHavoVwo", "false");
+  if (state.includeHavoVwo) params.set("includeHavoVwo", "true");
   const query = params.toString();
   const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}`;
   window.history.replaceState(null, "", nextUrl);
@@ -417,9 +417,9 @@ function compareSchools(a, b) {
   if (state.sort === "satisfaction") {
     const aScore = nullableNumberDescending(a.satisfaction?.score);
     const bScore = nullableNumberDescending(b.satisfaction?.score);
-    if (aScore !== bScore) return bScore - aScore;
+      if (aScore !== bScore) return bScore - aScore;
   }
-  return b.ratio.mid - a.ratio.mid;
+  return compareRatioRank(a, b);
 }
 
 function render() {
@@ -466,6 +466,9 @@ function renderList() {
   els.list.innerHTML = "";
   const fragment = document.createDocumentFragment();
   visible.forEach((school) => {
+    const selectedCount = getSelectedAdviceCount(school);
+    const ratioLabel = getSelectedRatioLabel();
+    const qualityLabel = getRatioQualityLabel(school);
     const button = document.createElement("button");
     button.type = "button";
     button.className = `school-card${school.id === state.selectedId ? " is-selected" : ""}`;
@@ -478,14 +481,16 @@ function renderList() {
         </div>
         <div class="ratio">
           <strong>${formatRatio(school.ratio)}</strong>
-          <span>${state.includeHavoVwo ? "VWO + HAVO/VWO" : "VWO"}</span>
+          <span>${ratioLabel}</span>
         </div>
       </div>
       <div class="bar-track"><span class="bar-fill" style="width:${Math.max(0, Math.min(100, school.ratio.mid * 100))}%"></span></div>
       <div class="school-meta">
         <span>${escapeHtml(school.type || "PO")}</span>
+        <span>${ratioLabel} ${formatRange(selectedCount.min, selectedCount.max)} / ${formatRange(school.advice?.totalMin, school.advice?.totalMax)}</span>
         <span>${formatRange(school.advice?.totalMin, school.advice?.totalMax)} adviezen</span>
         <span>${formatRange(school.pupils?.min, school.pupils?.max)} leerlingen</span>
+        ${qualityLabel ? `<span class="quality-chip">${escapeHtml(qualityLabel)}</span>` : ""}
         <span>tevredenheid ${formatSatisfaction(school.satisfaction)}</span>
         ${school.distanceKm != null ? `<span>${school.distanceKm.toFixed(1)} km</span>` : ""}
       </div>
@@ -509,7 +514,9 @@ function renderDetail() {
     return;
   }
 
-  const ratioLabel = state.includeHavoVwo ? "VWO + HAVO/VWO" : "VWO";
+  const ratioLabel = getSelectedRatioLabel();
+  const selectedCount = getSelectedAdviceCount(school);
+  const selectedCountLabel = state.includeHavoVwo ? "VWO of HAVO/VWO" : "VWO-advies";
   const website = school.website
     ? `<a href="${escapeAttr(school.website)}" target="_blank" rel="noreferrer">website</a>`
     : "";
@@ -521,7 +528,7 @@ function renderDetail() {
     </div>
     <div class="detail-grid">
       <div><strong>${formatRatio(school.ratio)}</strong><span>${ratioLabel}</span></div>
-      <div><strong>${formatRange(school.advice?.vwoEligibleMin, school.advice?.vwoEligibleMax)}</strong><span>kan naar VWO</span></div>
+      <div><strong>${formatRange(selectedCount.min, selectedCount.max)}</strong><span>${selectedCountLabel}</span></div>
       <div><strong>${formatRange(school.advice?.totalMin, school.advice?.totalMax)}</strong><span>adviezen</span></div>
       <div><strong>${formatRange(school.pupils?.min, school.pupils?.max)}</strong><span>leerlingen</span></div>
     </div>
@@ -535,7 +542,8 @@ function renderDetail() {
       ${school.distanceKm != null ? `<br>${school.distanceKm.toFixed(1)} km van het zoekcentrum` : ""}
     </div>
     <div class="source-line">
-      ${school.advice?.redacted ? "DUO privacywaarden onder 5 zijn als bereik verwerkt. " : ""}
+      Berekening: ${ratioLabel} ${formatRange(selectedCount.min, selectedCount.max)} / ${formatRange(school.advice?.totalMin, school.advice?.totalMax)} definitieve adviezen.
+      ${school.advice?.redacted ? "DUO privacywaarden &lt;5 zijn als bereik verwerkt. " : ""}
       ${school.origin?.redacted ? "Herkomstwaarden onder 5 zijn als bereik verwerkt. " : ""}
       ${website}
     </div>
@@ -1086,6 +1094,32 @@ function getRatioMetric(school) {
     hasRatio: true,
     redacted: Boolean(advice.redacted || bounds.min !== bounds.max)
   };
+}
+
+function getSelectedRatioLabel() {
+  return state.includeHavoVwo ? "VWO + HAVO/VWO" : "VWO";
+}
+
+function getSelectedAdviceCount(school) {
+  const advice = school.advice || {};
+  return state.includeHavoVwo
+    ? { min: advice.vwoEligibleMin, max: advice.vwoEligibleMax }
+    : { min: advice.vwoMin, max: advice.vwoMax };
+}
+
+function getRatioQualityLabel(school) {
+  if (!school.ratio?.hasRatio) return "";
+  const rangeWidth = Math.abs(Number(school.ratio.max || 0) - Number(school.ratio.min || 0));
+  const cohortMax = Number(school.advice?.totalMax || 0);
+  if (rangeWidth >= 0.2 || (cohortMax > 0 && cohortMax <= 20)) return "breed DUO-bereik";
+  if (school.ratio.redacted) return "DUO-bereik";
+  return "";
+}
+
+function compareRatioRank(a, b) {
+  const minDiff = Number(b.ratio?.min || 0) - Number(a.ratio?.min || 0);
+  if (Math.abs(minDiff) > 0.0001) return minDiff;
+  return Number(b.ratio?.mid || 0) - Number(a.ratio?.mid || 0);
 }
 
 function setupCanvas(canvas, ctx) {
