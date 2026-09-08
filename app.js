@@ -386,6 +386,7 @@ function enrichSchool(school) {
   const copy = {
     ...school,
     ratio: metric,
+    international: getInternationalMetric(school),
     distanceKm: state.center && hasLocation(school)
       ? distanceKm(state.center.latitude, state.center.longitude, Number(school.latitude), Number(school.longitude))
       : null
@@ -418,6 +419,9 @@ function compareSchools(a, b) {
     const aScore = nullableNumberDescending(a.satisfaction?.score);
     const bScore = nullableNumberDescending(b.satisfaction?.score);
       if (aScore !== bScore) return bScore - aScore;
+  }
+  if (state.sort === "international") {
+    return compareInternationalRank(a, b);
   }
   return compareRatioRank(a, b);
 }
@@ -490,6 +494,7 @@ function renderList() {
         <span>${ratioLabel} ${formatRange(selectedCount.min, selectedCount.max)} / ${formatRange(school.advice?.totalMin, school.advice?.totalMax)}</span>
         <span>${formatRange(school.advice?.totalMin, school.advice?.totalMax)} adviezen</span>
         <span>${formatRange(school.pupils?.min, school.pupils?.max)} leerlingen</span>
+        ${school.international.hasRatio ? `<span>internationaal ${formatRatioRange(school.international.min, school.international.max)}</span>` : ""}
         ${qualityLabel ? `<span class="quality-chip">${escapeHtml(qualityLabel)}</span>` : ""}
         <span>tevredenheid ${formatSatisfaction(school.satisfaction)}</span>
         ${school.distanceKm != null ? `<span>${school.distanceKm.toFixed(1)} km</span>` : ""}
@@ -1096,6 +1101,24 @@ function getRatioMetric(school) {
   };
 }
 
+function getInternationalMetric(school) {
+  const background = school.background || {};
+  const min = Number(background.nncaRatioMin);
+  const max = Number(background.nncaRatioMax);
+
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return { min: 0, max: 0, mid: 0, hasRatio: false, redacted: false };
+  }
+
+  return {
+    min,
+    max,
+    mid: (min + max) / 2,
+    hasRatio: true,
+    redacted: Boolean(background.redacted || min !== max)
+  };
+}
+
 function getSelectedRatioLabel() {
   return state.includeHavoVwo ? "VWO + HAVO/VWO" : "VWO";
 }
@@ -1120,6 +1143,19 @@ function compareRatioRank(a, b) {
   const minDiff = Number(b.ratio?.min || 0) - Number(a.ratio?.min || 0);
   if (Math.abs(minDiff) > 0.0001) return minDiff;
   return Number(b.ratio?.mid || 0) - Number(a.ratio?.mid || 0);
+}
+
+function compareInternationalRank(a, b) {
+  const aMetric = a.international || {};
+  const bMetric = b.international || {};
+  if (Boolean(aMetric.hasRatio) !== Boolean(bMetric.hasRatio)) {
+    return bMetric.hasRatio ? 1 : -1;
+  }
+  const minDiff = Number(bMetric.min || 0) - Number(aMetric.min || 0);
+  if (Math.abs(minDiff) > 0.0001) return minDiff;
+  const midDiff = Number(bMetric.mid || 0) - Number(aMetric.mid || 0);
+  if (Math.abs(midDiff) > 0.0001) return midDiff;
+  return compareRatioRank(a, b);
 }
 
 function setupCanvas(canvas, ctx) {

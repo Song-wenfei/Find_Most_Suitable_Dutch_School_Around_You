@@ -8,8 +8,20 @@ The VWO ratio is calculated from DUO's `Schooladviezen` file:
 - optional broader ratio: `(VWO + HAVO_VWO) / all definite final advice categories`
 - DUO values published as `<5` are preserved as ranges, so the UI shows a percentage range when the exact count is privacy masked
 - VWO sorting uses the lower end of the percentage range first, so schools with small privacy-masked cohorts are ranked conservatively
+- international sorting uses the lower end of the DUO NNCA/background percentage first; this is not exact nationality data
 
 ## Data
+
+Local data refresh status:
+
+- refreshed on 2026-09-07
+- generated data file: `data/schools.json`
+- generated schools: 6,452
+- schools with advice ratio data: 6,323
+- schools with 5-year advice history: 6,341
+- schools with origin postcode4 data: 6,357
+- schools with background ratio data: 6,385
+- schools with coordinates: 5,986
 
 The builder reads these official sources:
 
@@ -23,6 +35,7 @@ The builder reads these official sources:
 
 Pupil origin is shown as the ratio of pupils living in each 4-digit postcode area (`POSTCODE4_DEELNEMER`) for that school branch.
 Student background is DUO's NOAT/CUMI/NNCA indicator. It is not individual nationality data.
+The international ranking is based on this DUO background ratio, using the lower bound first for conservative ordering.
 Satisfaction sorting is present in the UI, but DUO does not provide a public school-level satisfaction score in these datasets.
 
 ## Build the dataset
