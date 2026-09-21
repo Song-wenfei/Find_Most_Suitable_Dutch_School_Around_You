@@ -155,6 +155,7 @@ const state = {
   query: "",
   radiusKm: 2.5,
   type: "all",
+  voLevel: "all",
   sort: "vwo",
   includeHavoVwo: false,
   center: null,
@@ -174,6 +175,8 @@ const els = {
   search: document.querySelector("#searchInput"),
   radius: document.querySelector("#radiusSelect"),
   type: document.querySelector("#typeSelect"),
+  voLevel: document.querySelector("#voLevelSelect"),
+  voLevelField: document.querySelector("#voLevelField"),
   sort: document.querySelector("#sortSelect"),
   include: document.querySelector("#includeHavoVwo"),
   list: document.querySelector("#schoolList"),
@@ -229,6 +232,7 @@ function bindEvents() {
   });
 
   els.form.addEventListener("input", debounce(async () => {
+    syncVoLevelAvailability();
     syncState();
     updateUrl();
     await updateCenter();
@@ -236,6 +240,7 @@ function bindEvents() {
   }, 160));
 
   els.form.addEventListener("change", async () => {
+    syncVoLevelAvailability();
     syncState();
     updateUrl();
     await updateCenter();
@@ -261,6 +266,7 @@ function syncState() {
   state.query = els.search.value.trim();
   state.radiusKm = Number(els.radius.value);
   state.type = els.type.value;
+  state.voLevel = els.voLevel.value;
   state.sort = els.sort.value;
   state.includeHavoVwo = els.include.checked;
 }
@@ -268,13 +274,28 @@ function syncState() {
 function hydrateControlsFromUrl() {
   const params = new URLSearchParams(window.location.search);
   if (params.has("q")) els.search.value = params.get("q") || "";
-  if (params.has("radius")) els.radius.value = params.get("radius") || els.radius.value;
-  if (params.has("type")) els.type.value = params.get("type") || els.type.value;
+  if (params.has("radius") && hasSelectOption(els.radius, params.get("radius"))) {
+    els.radius.value = params.get("radius") || els.radius.value;
+  }
+  if (params.has("type") && hasSelectOption(els.type, params.get("type"))) {
+    els.type.value = params.get("type") || els.type.value;
+  }
+  if (params.has("level") && hasSelectOption(els.voLevel, params.get("level"))) {
+    els.voLevel.value = params.get("level") || els.voLevel.value;
+  }
   if (params.has("sort") && hasSelectOption(els.sort, params.get("sort"))) {
     els.sort.value = params.get("sort") || els.sort.value;
   }
   if (params.has("includeHavoVwo")) els.include.checked = params.get("includeHavoVwo") !== "false";
+  syncVoLevelAvailability();
   syncState();
+}
+
+function syncVoLevelAvailability() {
+  const enabled = els.type.value === "Vo";
+  els.voLevel.disabled = !enabled;
+  els.voLevelField.classList.toggle("is-disabled", !enabled);
+  if (!enabled) els.voLevel.value = "all";
 }
 
 function updateUrl() {
@@ -282,6 +303,7 @@ function updateUrl() {
   if (state.query) params.set("q", state.query);
   params.set("radius", String(state.radiusKm));
   params.set("type", state.type);
+  if (state.type === "Vo" && state.voLevel !== "all") params.set("level", state.voLevel);
   params.set("sort", state.sort);
   if (state.includeHavoVwo) params.set("includeHavoVwo", "true");
   const query = params.toString();
@@ -364,7 +386,9 @@ function applyFilters() {
   state.filtered = state.schools
     .map((school) => enrichSchool(school))
     .filter((school) => {
-      if (state.type !== "all" && school.type !== state.type) return false;
+      if (state.type === "primary" && school.sector !== "PO") return false;
+      if (!["all", "primary"].includes(state.type) && school.type !== state.type) return false;
+      if (state.type === "Vo" && state.voLevel !== "all" && !offersVoLevel(school, state.voLevel)) return false;
       if (radiusSearchActive) {
         if (!hasLocation(school)) return false;
         return school.distanceKm <= state.radiusKm;
@@ -379,6 +403,19 @@ function applyFilters() {
   }
 
   render();
+}
+
+function offersVoLevel(school, level) {
+  if (school.type !== "Vo") return false;
+  const officialStructure = normalize(school.educationStructure);
+  const programmeSource = officialStructure || normalize((school.tracks || []).join(" "));
+  const programmes = programmeSource.split(" ");
+  const programmeSet = new Set(programmes);
+
+  if (level === "VMBO") {
+    return ["vmbo", "vbo", "mavo"].some((programme) => programmeSet.has(programme));
+  }
+  return programmeSet.has(level.toLowerCase());
 }
 
 function enrichSchool(school) {
@@ -407,7 +444,9 @@ function matchesQuery(school, q, postcode) {
     school.province,
     school.postcode,
     school.brin,
-    school.denomination
+    school.denomination,
+    school.educationStructure,
+    ...(school.tracks || [])
   ].some((value) => normalize(value).includes(q));
 }
 
@@ -437,7 +476,7 @@ function renderSummary() {
   const count = state.filtered.length;
   const withRatio = state.filtered.filter((school) => school.ratio.hasRatio).length;
   const withLocation = state.filtered.filter(hasLocation).length;
-  const withHistory = state.filtered.filter(hasAdviceHistory).length;
+  const withHistory = state.filtered.filter(hasRatioHistory).length;
   const withBackground = state.filtered.filter(hasBackground).length;
   const median = medianOf(state.filtered.filter((s) => s.ratio.hasRatio).map((s) => s.ratio.mid));
   const centerText = state.center
@@ -445,10 +484,13 @@ function renderSummary() {
     : state.query
       ? "zoekresultaten"
       : "heel Nederland";
+  const levelText = state.type === "Vo" && state.voLevel !== "all"
+    ? `, niveau ${state.voLevel}`
+    : "";
 
   els.summary.textContent = state.loadError
     ? "Voorbeelddata actief. Run de DUO update voor de volledige dataset."
-    : `${count.toLocaleString("nl-NL")} scholen, ${centerText}`;
+    : `${count.toLocaleString("nl-NL")} scholen${levelText}, ${centerText}`;
   els.median.textContent = Number.isFinite(median) ? `mediaan ${formatPercent(median)}` : "--";
   els.mapStatus.textContent = state.center ? centerText : "Nederland";
   els.stats.innerHTML = `
@@ -470,8 +512,10 @@ function renderList() {
   els.list.innerHTML = "";
   const fragment = document.createDocumentFragment();
   visible.forEach((school) => {
-    const selectedCount = getSelectedAdviceCount(school);
-    const ratioLabel = getSelectedRatioLabel();
+    const metricData = getRatioData(school);
+    const selectedCount = getSelectedRatioCount(school);
+    const ratioLabel = getSelectedRatioLabel(school);
+    const cohortLabel = getCohortLabel(school);
     const qualityLabel = getRatioQualityLabel(school);
     const button = document.createElement("button");
     button.type = "button";
@@ -490,11 +534,11 @@ function renderList() {
       </div>
       <div class="bar-track"><span class="bar-fill" style="width:${Math.max(0, Math.min(100, school.ratio.mid * 100))}%"></span></div>
       <div class="school-meta">
-        <span>${escapeHtml(school.type || "PO")}</span>
-        <span>${ratioLabel} ${formatRange(selectedCount.min, selectedCount.max)} / ${formatRange(school.advice?.totalMin, school.advice?.totalMax)}</span>
-        <span>${formatRange(school.advice?.totalMin, school.advice?.totalMax)} adviezen</span>
+        <span>${escapeHtml(getSchoolTypeLabel(school))}</span>
+        <span>${ratioLabel} ${formatRange(selectedCount.min, selectedCount.max)} / ${formatRange(metricData.totalMin, metricData.totalMax)}</span>
+        <span>${formatRange(metricData.totalMin, metricData.totalMax)} ${cohortLabel}</span>
         <span>${formatRange(school.pupils?.min, school.pupils?.max)} leerlingen</span>
-        ${school.international.hasRatio ? `<span>internationaal ${formatRatioRange(school.international.min, school.international.max)}</span>` : ""}
+        ${school.international.hasRatio ? `<span>${isSecondary(school) ? "buitenlandadres" : "internationaal"} ${formatRatioRange(school.international.min, school.international.max)}</span>` : ""}
         ${qualityLabel ? `<span class="quality-chip">${escapeHtml(qualityLabel)}</span>` : ""}
         <span>tevredenheid ${formatSatisfaction(school.satisfaction)}</span>
         ${school.distanceKm != null ? `<span>${school.distanceKm.toFixed(1)} km</span>` : ""}
@@ -519,11 +563,12 @@ function renderDetail() {
     return;
   }
 
-  const ratioLabel = getSelectedRatioLabel();
-  const selectedCount = getSelectedAdviceCount(school);
-  const selectedCountLabel = state.includeHavoVwo ? "VWO of HAVO/VWO" : "VWO-advies";
+  const metricData = getRatioData(school);
+  const ratioLabel = getSelectedRatioLabel(school);
+  const selectedCount = getSelectedRatioCount(school);
+  const selectedCountLabel = state.includeHavoVwo ? "VWO of HAVO/VWO" : (isSecondary(school) ? "VWO-leerlingen" : "VWO-advies");
   const website = school.website
-    ? `<a href="${escapeAttr(school.website)}" target="_blank" rel="noreferrer">website</a>`
+    ? `<a href="${escapeAttr(school.website)}" target="_blank" rel="noopener noreferrer">website</a>`
     : "";
 
   els.detail.innerHTML = `
@@ -534,7 +579,7 @@ function renderDetail() {
     <div class="detail-grid">
       <div><strong>${formatRatio(school.ratio)}</strong><span>${ratioLabel}</span></div>
       <div><strong>${formatRange(selectedCount.min, selectedCount.max)}</strong><span>${selectedCountLabel}</span></div>
-      <div><strong>${formatRange(school.advice?.totalMin, school.advice?.totalMax)}</strong><span>adviezen</span></div>
+      <div><strong>${formatRange(metricData.totalMin, metricData.totalMax)}</strong><span>${getCohortLabel(school)}</span></div>
       <div><strong>${formatRange(school.pupils?.min, school.pupils?.max)}</strong><span>leerlingen</span></div>
     </div>
     ${renderAdviceHistory(school)}
@@ -543,12 +588,12 @@ function renderDetail() {
     ${renderOriginDetail(school)}
     <div class="address-line">
       ${escapeHtml(compact([school.address, school.postcode, school.city]).join(", "))}<br>
-      BRIN ${escapeHtml(school.brin || "-")} / Vestiging ${escapeHtml(school.branch || "-")} / ${escapeHtml(school.denomination || "-")}
+      BRIN ${escapeHtml(school.brin || "-")} / Vestiging ${escapeHtml(school.branch || "-")} / ${escapeHtml(getSchoolTypeLabel(school))} / ${escapeHtml(school.denomination || "-")}
       ${school.distanceKm != null ? `<br>${school.distanceKm.toFixed(1)} km van het zoekcentrum` : ""}
     </div>
     <div class="source-line">
-      Berekening: ${ratioLabel} ${formatRange(selectedCount.min, selectedCount.max)} / ${formatRange(school.advice?.totalMin, school.advice?.totalMax)} definitieve adviezen.
-      ${school.advice?.redacted ? "DUO privacywaarden &lt;5 zijn als bereik verwerkt. " : ""}
+      Berekening: ${ratioLabel} ${formatRange(selectedCount.min, selectedCount.max)} / ${formatRange(metricData.totalMin, metricData.totalMax)} ${escapeHtml(getCalculationBasis(school))}.
+      ${metricData.redacted ? "DUO privacywaarden &lt;5 zijn als bereik verwerkt. " : ""}
       ${school.origin?.redacted ? "Herkomstwaarden onder 5 zijn als bereik verwerkt. " : ""}
       ${website}
     </div>
@@ -567,7 +612,7 @@ function renderOriginSummary(school) {
 
   const chips = (school.origin.top || []).slice(0, 3).map((item) => `
     <span>
-      <strong>${escapeHtml(item.postcode4)}</strong>
+      <strong>${escapeHtml(item.label || item.postcode4 || "Onbekend")}</strong>
       ${formatRatioRange(item.ratioMin, item.ratioMax)}
     </span>
   `).join("");
@@ -584,11 +629,12 @@ function renderBackgroundSummary(school) {
   if (!hasBackground(school)) {
     return "";
   }
+  const labels = getBackgroundLabels(school);
   return `
     <div class="origin-summary background-summary">
-      <div class="origin-title">Nationaliteit/achtergrond ${escapeHtml(String(school.background.year || ""))}</div>
+      <div class="origin-title">${escapeHtml(labels.title)} ${escapeHtml(String(school.background.year || ""))}</div>
       <div class="origin-chips">
-        <span><strong>NNCA</strong>${formatRatioRange(school.background.nncaRatioMin, school.background.nncaRatioMax)}</span>
+        <span><strong>${escapeHtml(labels.short)}</strong>${formatRatioRange(school.background.nncaRatioMin, school.background.nncaRatioMax)}</span>
         <span><strong>${escapeHtml(school.background.measure || "DUO")}</strong>${formatRange(school.background.nncaMin, school.background.nncaMax)} leerlingen</span>
       </div>
     </div>
@@ -596,13 +642,14 @@ function renderBackgroundSummary(school) {
 }
 
 function renderAdviceHistory(school) {
-  const history = (school.history?.advice || []).slice(-5);
+  const history = getRatioHistory(school).slice(-5);
   const label = state.includeHavoVwo ? "VWO + HAVO/VWO" : "VWO";
+  const title = isSecondary(school) ? "VWO-aandeel laatste 5 jaar" : "VWO-advies laatste 5 jaar";
   if (!history.length) {
     return `
       <section class="trend-panel">
         <div class="trend-head">
-          <h3>VWO-ratio laatste 5 jaar</h3>
+          <h3>${title}</h3>
           <span>--</span>
         </div>
         <p>Geen DUO-historie beschikbaar voor deze vestiging.</p>
@@ -629,7 +676,7 @@ function renderAdviceHistory(school) {
   return `
     <section class="trend-panel">
       <div class="trend-head">
-        <h3>VWO-ratio laatste 5 jaar</h3>
+        <h3>${title}</h3>
         <span>${escapeHtml(label)}</span>
       </div>
       <div class="trend-list">${rows}</div>
@@ -638,14 +685,15 @@ function renderAdviceHistory(school) {
 }
 
 function renderBackgroundDetail(school) {
+  const labels = getBackgroundLabels(school);
   if (!hasBackground(school)) {
     return `
       <section class="trend-panel">
         <div class="trend-head">
-          <h3>Nationaliteit/achtergrond leerlingen</h3>
-          <span>DUO NNCA</span>
+          <h3>${escapeHtml(labels.title)}</h3>
+          <span>DUO</span>
         </div>
-        <p>Geen DUO-achtergronddata beschikbaar voor deze vestiging.</p>
+        <p>${isSecondary(school) ? "DUO publiceert in deze VO-bestanden geen vergelijkbare NNCA-achtergrondmaat per vestiging." : "Geen DUO-achtergronddata beschikbaar voor deze vestiging."}</p>
       </section>
     `;
   }
@@ -666,13 +714,13 @@ function renderBackgroundDetail(school) {
   return `
     <section class="trend-panel">
       <div class="trend-head">
-        <h3>Nationaliteit/achtergrond leerlingen</h3>
+        <h3>${escapeHtml(labels.title)}</h3>
         <span>DUO ${escapeHtml(school.background.measure || "NNCA")} ${escapeHtml(String(school.background.year || ""))}</span>
       </div>
       <div class="trend-metric">
         <strong>${formatRatioRange(school.background.nncaRatioMin, school.background.nncaRatioMax)}</strong>
-        <span>NNCA / niet-Nederlandse culturele achtergrond: ${formatRange(school.background.nncaMin, school.background.nncaMax)} leerlingen</span>
-        <span>Overige achtergrond: ${formatRange(school.background.referenceMin, school.background.referenceMax)} leerlingen</span>
+        <span>${escapeHtml(labels.category)}: ${formatRange(school.background.nncaMin, school.background.nncaMax)} leerlingen</span>
+        <span>${escapeHtml(labels.reference)}: ${formatRange(school.background.referenceMin, school.background.referenceMax)} leerlingen</span>
       </div>
       <div class="trend-list">${rows}</div>
     </section>
@@ -725,7 +773,7 @@ function renderOriginDetail(school) {
     return `
       <div class="origin-row">
         <div>
-          <strong>${escapeHtml(item.postcode4)}</strong>
+          <strong>${escapeHtml(item.label || item.postcode4 || "Onbekend")}</strong>
           <span>${formatRange(item.min, item.max)} leerlingen</span>
         </div>
         <div class="origin-row-bar" aria-hidden="true"><span style="width:${width}%"></span></div>
@@ -824,7 +872,7 @@ function renderLeafletMap() {
       fillColor: colorForRatio(school.ratio.mid),
       fillOpacity: school.id === state.selectedId ? 0.95 : 0.72
     });
-    marker.bindTooltip(`${school.name || "School"}<br>${formatRatio(school.ratio)} VWO`, {
+    marker.bindTooltip(`${escapeHtml(school.name || "School")}<br>${formatRatio(school.ratio)} ${escapeHtml(getSelectedRatioLabel(school))}`, {
       direction: "top",
       opacity: 0.92
     });
@@ -902,7 +950,8 @@ function renderDistributionMap() {
   }
 
   visibleSchools.forEach((school) => {
-    const cohort = midpoint(school.advice?.totalMin, school.advice?.totalMax);
+    const metricData = getRatioData(school);
+    const cohort = midpoint(metricData.totalMin, metricData.totalMax);
     const marker = L.circleMarker([Number(school.latitude), Number(school.longitude)], {
       radius: cohortRadius(cohort),
       color: school.id === state.selectedId ? "#17211d" : "#ffffff",
@@ -910,7 +959,7 @@ function renderDistributionMap() {
       fillColor: colorForRatio(school.ratio.mid),
       fillOpacity: school.id === state.selectedId ? 0.95 : 0.74
     });
-    marker.bindTooltip(`${school.name || "School"}<br>${formatRatio(school.ratio)} VWO<br>${formatRange(school.advice?.totalMin, school.advice?.totalMax)} adviezen`, {
+    marker.bindTooltip(`${escapeHtml(school.name || "School")}<br>${formatRatio(school.ratio)} ${escapeHtml(getSelectedRatioLabel(school))}<br>${formatRange(metricData.totalMin, metricData.totalMax)} ${escapeHtml(getCohortLabel(school))}`, {
       direction: "top",
       opacity: 0.92
     });
@@ -968,7 +1017,10 @@ function renderScatter() {
   const height = canvas.height;
   const schools = state.filtered.filter((school) => school.ratio.hasRatio).slice(0, 1200);
   const pad = { left: 42, right: 18, top: 20, bottom: 34 };
-  const maxCohort = Math.max(10, ...schools.map((school) => midpoint(school.advice?.totalMin, school.advice?.totalMax)));
+  const maxCohort = Math.max(10, ...schools.map((school) => {
+    const metricData = getRatioData(school);
+    return midpoint(metricData.totalMin, metricData.totalMax);
+  }));
 
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#f8fbf8";
@@ -976,7 +1028,8 @@ function renderScatter() {
   drawAxis(ctx, width, height, pad, maxCohort);
 
   schools.forEach((school) => {
-    const cohort = midpoint(school.advice?.totalMin, school.advice?.totalMax);
+    const metricData = getRatioData(school);
+    const cohort = midpoint(metricData.totalMin, metricData.totalMax);
     const x = pad.left + (Math.sqrt(cohort / maxCohort) * (width - pad.left - pad.right));
     const y = pad.top + ((1 - clamp(school.ratio.mid, 0, 1)) * (height - pad.top - pad.bottom));
     school.__scatterPoint = { x, y };
@@ -1038,7 +1091,7 @@ function drawAxis(ctx, width, height, pad, maxCohort) {
   ctx.fillText("100%", 8, pad.top + 8);
   ctx.fillText("0%", 16, height - pad.bottom + 4);
   ctx.textAlign = "right";
-  ctx.fillText(`${Math.round(maxCohort)} adviezen`, width - pad.right, height - 10);
+  ctx.fillText(`${Math.round(maxCohort)} leerlingen`, width - pad.right, height - 10);
 }
 
 function drawPoint(ctx, x, y, radius, color, selected) {
@@ -1081,11 +1134,11 @@ function selectSchool(id) {
 }
 
 function getRatioMetric(school) {
-  const advice = school.advice || {};
-  const numeratorMin = state.includeHavoVwo ? advice.vwoEligibleMin : advice.vwoMin;
-  const numeratorMax = state.includeHavoVwo ? advice.vwoEligibleMax : advice.vwoMax;
-  const totalMin = Number(advice.totalMin);
-  const totalMax = Number(advice.totalMax);
+  const data = getRatioData(school);
+  const numeratorMin = state.includeHavoVwo ? data.vwoEligibleMin : data.vwoMin;
+  const numeratorMax = state.includeHavoVwo ? data.vwoEligibleMax : data.vwoMax;
+  const totalMin = Number(data.totalMin);
+  const totalMax = Number(data.totalMax);
 
   if (!Number.isFinite(totalMin) || !Number.isFinite(totalMax) || totalMax <= 0) {
     return { min: 0, max: 0, mid: 0, hasRatio: false, redacted: false };
@@ -1097,12 +1150,15 @@ function getRatioMetric(school) {
     max: bounds.max,
     mid: (bounds.min + bounds.max) / 2,
     hasRatio: true,
-    redacted: Boolean(advice.redacted || bounds.min !== bounds.max)
+    redacted: Boolean(data.redacted || bounds.min !== bounds.max)
   };
 }
 
 function getInternationalMetric(school) {
   const background = school.background || {};
+  if (background.nncaRatioMin == null || background.nncaRatioMax == null || !hasBackground(school)) {
+    return { min: 0, max: 0, mid: 0, hasRatio: false, redacted: false };
+  }
   const min = Number(background.nncaRatioMin);
   const max = Number(background.nncaRatioMax);
 
@@ -1119,21 +1175,68 @@ function getInternationalMetric(school) {
   };
 }
 
-function getSelectedRatioLabel() {
-  return state.includeHavoVwo ? "VWO + HAVO/VWO" : "VWO";
+function getBackgroundLabels(school) {
+  const background = school.background || {};
+  if (isSecondary(school)) {
+    return {
+      title: "Woonland leerlingen",
+      short: "Buitenland",
+      category: background.categoryLabel || "Woonachtig in het buitenland",
+      reference: background.referenceLabel || "Nederlands woonadres"
+    };
+  }
+  return {
+    title: "Culturele achtergrond leerlingen",
+    short: "NNCA",
+    category: background.categoryLabel || "NNCA / niet-Nederlandse culturele achtergrond",
+    reference: background.referenceLabel || "Overige achtergrond"
+  };
 }
 
-function getSelectedAdviceCount(school) {
-  const advice = school.advice || {};
+function getRatioData(school) {
+  return isSecondary(school) ? (school.enrollment || {}) : (school.advice || {});
+}
+
+function getSelectedRatioLabel(school) {
+  if (state.includeHavoVwo) return isSecondary(school) ? "VWO + gemengd HAVO/VWO" : "VWO + HAVO/VWO";
+  return isSecondary(school) ? "VWO-aandeel" : "VWO-advies";
+}
+
+function getSelectedRatioCount(school) {
+  const data = getRatioData(school);
   return state.includeHavoVwo
-    ? { min: advice.vwoEligibleMin, max: advice.vwoEligibleMax }
-    : { min: advice.vwoMin, max: advice.vwoMax };
+    ? { min: data.vwoEligibleMin, max: data.vwoEligibleMax }
+    : { min: data.vwoMin, max: data.vwoMax };
+}
+
+function getCohortLabel(school) {
+  return isSecondary(school) ? "leerlingen met bekend niveau" : "adviezen";
+}
+
+function getCalculationBasis(school) {
+  return isSecondary(school)
+    ? "VO-leerlingen in PRO, vmbo, havo, HAVO/VWO of vwo; brugklassen en VAVO-uitbestedingen tellen niet mee"
+    : "definitieve adviezen";
+}
+
+function getSchoolTypeLabel(school) {
+  if (!isSecondary(school)) return school.type || "PO";
+  const structure = school.educationStructure || (school.tracks || []).join(" / ");
+  return structure ? `VO · ${structure}` : "VO";
+}
+
+function getRatioHistory(school) {
+  return isSecondary(school) ? (school.history?.enrollment || []) : (school.history?.advice || []);
+}
+
+function isSecondary(school) {
+  return school?.sector === "VO" || school?.type === "Vo";
 }
 
 function getRatioQualityLabel(school) {
   if (!school.ratio?.hasRatio) return "";
   const rangeWidth = Math.abs(Number(school.ratio.max || 0) - Number(school.ratio.min || 0));
-  const cohortMax = Number(school.advice?.totalMax || 0);
+  const cohortMax = Number(getRatioData(school).totalMax || 0);
   if (rangeWidth >= 0.2 || (cohortMax > 0 && cohortMax <= 20)) return "breed DUO-bereik";
   if (school.ratio.redacted) return "DUO-bereik";
   return "";
@@ -1224,8 +1327,8 @@ function hasOrigin(school) {
   return Number.isFinite(totalMax) && totalMax > 0 && Array.isArray(school.origin?.top);
 }
 
-function hasAdviceHistory(school) {
-  return Array.isArray(school.history?.advice) && school.history.advice.length > 0;
+function hasRatioHistory(school) {
+  return getRatioHistory(school).length > 0;
 }
 
 function hasBackground(school) {

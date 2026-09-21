@@ -38,6 +38,54 @@ SOURCE_FILES = {
         "label": "DUO schoolvestigingen basisonderwijs",
         "page": "https://duo.nl/open_onderwijsdata/primair-onderwijs/scholen-en-adressen/schoolvestigingen-basisonderwijs.jsp",
     },
+    "voAddresses": {
+        "url": "https://duo.nl/open_onderwijsdata/images/02.-alle-vestigingen-vo.csv",
+        "path": RAW_DIR / "vo-vestigingen.csv",
+        "label": "DUO alle vestigingen voortgezet onderwijs",
+        "page": "https://duo.nl/open_onderwijsdata/voortgezet-onderwijs/adressen/vestigingen.jsp",
+    },
+    "voPupils2021": {
+        "url": "https://duo.nl/open_onderwijsdata/images/01.-leerlingen-vo-per-vestiging-naar-onderwijstype-2021.csv",
+        "path": RAW_DIR / "vo-leerlingen-2021.csv",
+        "label": "DUO leerlingen VO naar onderwijstype 2021",
+        "page": "https://duo.nl/open_onderwijsdata/voortgezet-onderwijs/aantal-leerlingen/aantal-leerlingen.jsp",
+        "year": 2021,
+    },
+    "voPupils2022": {
+        "url": "https://duo.nl/open_onderwijsdata/images/01.-leerlingen-vo-per-vestiging-naar-onderwijstype-2022.csv",
+        "path": RAW_DIR / "vo-leerlingen-2022.csv",
+        "label": "DUO leerlingen VO naar onderwijstype 2022",
+        "page": "https://duo.nl/open_onderwijsdata/voortgezet-onderwijs/aantal-leerlingen/aantal-leerlingen.jsp",
+        "year": 2022,
+    },
+    "voPupils2023": {
+        "url": "https://duo.nl/open_onderwijsdata/images/01.-leerlingen-vo-per-vestiging-naar-onderwijstype-2023.csv",
+        "path": RAW_DIR / "vo-leerlingen-2023.csv",
+        "label": "DUO leerlingen VO naar onderwijstype 2023",
+        "page": "https://duo.nl/open_onderwijsdata/voortgezet-onderwijs/aantal-leerlingen/aantal-leerlingen.jsp",
+        "year": 2023,
+    },
+    "voPupils2024": {
+        "url": "https://duo.nl/open_onderwijsdata/images/01.-leerlingen-vo-per-vestiging-naar-onderwijstype-2024.csv",
+        "path": RAW_DIR / "vo-leerlingen-2024.csv",
+        "label": "DUO leerlingen VO naar onderwijstype 2024",
+        "page": "https://duo.nl/open_onderwijsdata/voortgezet-onderwijs/aantal-leerlingen/aantal-leerlingen.jsp",
+        "year": 2024,
+    },
+    "voPupils2025": {
+        "url": "https://duo.nl/open_onderwijsdata/images/01.-leerlingen-vo-per-vestiging-naar-onderwijstype-2025.csv",
+        "path": RAW_DIR / "vo-leerlingen-2025.csv",
+        "label": "DUO voorlopige leerlingen VO naar onderwijstype 2025",
+        "page": "https://duo.nl/open_onderwijsdata/voortgezet-onderwijs/aantal-leerlingen/aantal-leerlingen.jsp",
+        "year": 2025,
+    },
+    "voOrigin2025": {
+        "url": "https://duo.nl/open_onderwijsdata/images/02.-leerlingen-per-vestiging-naar-postcode-en-leerjaar-2025.csv",
+        "path": RAW_DIR / "vo-postcode-2025.csv",
+        "label": "DUO leerlingen VO naar postcode en leerjaar 2025",
+        "page": "https://duo.nl/open_onderwijsdata/voortgezet-onderwijs/aantal-leerlingen/aantal-leerlingen.jsp",
+        "year": 2025,
+    },
     "locations": {
         "url": "https://onderwijsdata.duo.nl/dataset/c416acd1-e083-4ec6-9203-3b20f98fe143/resource/a7e3f323-6e46-4dca-a834-369d9d520aa8/download/onderwijslocaties.csv",
         "path": RAW_DIR / "onderwijslocaties.csv",
@@ -95,6 +143,12 @@ ADVICE_COLUMNS = [
 ]
 
 AGE_PREFIX = "LEEFTIJD_"
+VO_PUPIL_COLUMNS = [
+    f"LEER- OF VERBLIJFSJAAR {year} - {gender}"
+    for year in range(1, 7)
+    for gender in ("MAN", "VROUW")
+]
+VO_ORIGIN_COLUMNS = [f"LEER- OF VERBLIJFSJAAR {year}" for year in range(1, 7)]
 VWO_CODE = "11"
 HAVO_VWO_CODE = "10"
 ADVICE_HISTORY_CODES = {str(value) for value in range(1, 12)}
@@ -131,14 +185,27 @@ def main() -> int:
         return 2
 
     addresses = index_addresses(read_csv(SOURCE_FILES["addresses"]["path"]))
+    vo_addresses = index_addresses(read_csv(SOURCE_FILES["voAddresses"]["path"]))
     locations = index_locations(read_csv(SOURCE_FILES["locations"]["path"]))
     schools = build_base_schools(addresses, locations)
+    merge_vo_addresses(schools, vo_addresses, locations)
     merge_pupils(schools, read_csv(SOURCE_FILES["pupils"]["path"]))
     merge_advice(schools, read_csv(SOURCE_FILES["advice"]["path"]))
     merge_origins(schools, read_csv(SOURCE_FILES["originPostcode4"]["path"]))
     merge_advice_history(schools, read_csv(SOURCE_FILES["adviceHistory"]["path"]))
     merge_background(schools, read_csv(SOURCE_FILES["backgroundBo"]["path"]), "NOAT", "NOAT")
     merge_background(schools, read_csv(SOURCE_FILES["backgroundSbo"]["path"]), "CUMI", "CUMI")
+    vo_years = [
+        (int(source["year"]), read_csv(source["path"]))
+        for source in SOURCE_FILES.values()
+        if source.get("year") and str(source["path"].name).startswith("vo-leerlingen-")
+    ]
+    merge_vo_pupils(schools, vo_years)
+    merge_vo_origins(
+        schools,
+        read_csv(SOURCE_FILES["voOrigin2025"]["path"]),
+        int(SOURCE_FILES["voOrigin2025"]["year"]),
+    )
 
     rows = [school for school in schools.values() if school.get("name")]
     rows.sort(key=lambda item: (item.get("city") or "", item.get("name") or "", item.get("id") or ""))
@@ -155,8 +222,12 @@ def main() -> int:
         ],
         "stats": {
             "schoolCount": len(rows),
+            "primarySchoolCount": sum(1 for row in rows if row.get("sector") == "PO"),
+            "secondarySchoolCount": sum(1 for row in rows if row.get("sector") == "VO"),
             "adviceRatioCount": sum(1 for row in rows if (row.get("advice", {}).get("totalMax") or 0) > 0),
+            "enrollmentRatioCount": sum(1 for row in rows if (row.get("enrollment", {}).get("totalMax") or 0) > 0),
             "adviceHistoryCount": sum(1 for row in rows if row.get("history", {}).get("advice")),
+            "enrollmentHistoryCount": sum(1 for row in rows if row.get("history", {}).get("enrollment")),
             "originRatioCount": sum(1 for row in rows if (row.get("origin", {}).get("totalMax") or 0) > 0),
             "backgroundRatioCount": sum(1 for row in rows if (row.get("background", {}).get("totalMax") or 0) > 0),
             "withCoordinates": sum(1 for row in rows if row.get("latitude") is not None and row.get("longitude") is not None),
@@ -286,7 +357,7 @@ def read_csv(path: Path) -> list[dict[str, str]]:
 
 
 def detect_encoding(path: Path) -> str:
-    data = path.read_bytes()[:8192]
+    data = path.read_bytes()
     for encoding in ("utf-8-sig", "cp1252", "latin-1"):
         try:
             data.decode(encoding)
@@ -297,7 +368,11 @@ def detect_encoding(path: Path) -> str:
 
 
 def clean_header(value: str | None) -> str:
-    return (value or "").strip().strip('"')
+    header = re.sub(r"\s+", " ", (value or "").strip().strip('"').replace(".", " "))
+    return {
+        "BRIN NUMMER": "INSTELLINGSCODE",
+        "INSTELLING": "INSTELLINGSCODE",
+    }.get(header, header)
 
 
 def index_addresses(rows: list[dict[str, str]]) -> dict[str, dict[str, str]]:
@@ -339,6 +414,9 @@ def build_base_schools(
             "province": title_or_empty(address.get("PROVINCIE")),
             "postcode": normalize_postcode(address.get("POSTCODE")),
             "type": "",
+            "sector": "PO",
+            "educationStructure": None,
+            "tracks": [],
             "denomination": title_or_empty(address.get("DENOMINATIE")),
             "address": format_address(address.get("STRAATNAAM"), address.get("HUISNUMMER-TOEVOEGING")),
             "phone": blank_to_none(address.get("TELEFOONNUMMER")),
@@ -347,13 +425,51 @@ def build_base_schools(
             "longitude": as_float(location.get("GPS_LONGITUDE")) if location else None,
             "pupils": {"min": None, "max": None, "redacted": False},
             "advice": empty_advice(),
+            "enrollment": empty_enrollment(),
             "origin": empty_origin(),
             "background": empty_background(),
-            "history": {"advice": []},
+            "history": {"advice": [], "enrollment": []},
             "satisfaction": empty_satisfaction(),
         }
         schools[key] = school
     return schools
+
+
+def merge_vo_addresses(
+    schools: dict[str, dict],
+    addresses: dict[str, dict[str, str]],
+    locations: dict[str, list[dict[str, str]]],
+) -> None:
+    for key, address in addresses.items():
+        inst, branch = key.split("-", 1)
+        location = best_location(address, locations)
+        schools[key] = {
+            "id": key,
+            "brin": inst,
+            "branch": branch,
+            "name": tidy_name(address.get("VESTIGINGSNAAM")),
+            "city": address.get("PLAATSNAAM", "").strip(),
+            "municipality": title_or_empty(address.get("GEMEENTENAAM")),
+            "province": title_or_empty(address.get("PROVINCIE")),
+            "postcode": normalize_postcode(address.get("POSTCODE")),
+            "type": "Vo",
+            "sector": "VO",
+            "educationStructure": blank_to_none(address.get("ONDERWIJSSTRUCTUUR")),
+            "tracks": [],
+            "denomination": title_or_empty(address.get("DENOMINATIE")),
+            "address": format_address(address.get("STRAATNAAM"), address.get("HUISNUMMER-TOEVOEGING")),
+            "phone": blank_to_none(address.get("TELEFOONNUMMER")),
+            "website": normalize_url(address.get("INTERNETADRES")),
+            "latitude": as_float(location.get("GPS_LATITUDE")) if location else None,
+            "longitude": as_float(location.get("GPS_LONGITUDE")) if location else None,
+            "pupils": {"min": None, "max": None, "redacted": False},
+            "advice": empty_advice(),
+            "enrollment": empty_enrollment(),
+            "origin": empty_origin(),
+            "background": empty_background(),
+            "history": {"advice": [], "enrollment": []},
+            "satisfaction": empty_satisfaction(),
+        }
 
 
 def merge_pupils(schools: dict[str, dict], rows: list[dict[str, str]]) -> None:
@@ -624,6 +740,234 @@ def merge_background(schools: dict[str, dict], rows: list[dict[str, str]], code_
         }
 
 
+def merge_vo_pupils(schools: dict[str, dict], yearly_rows: list[tuple[int, list[dict[str, str]]]]) -> None:
+    grouped: dict[str, dict[int, dict]] = {}
+    for year, rows in yearly_rows:
+        for row in rows:
+            level = row.get("ONDERWIJSTYPE VO EN LEER- OF VERBLIJFSJAAR", "").strip()
+            if "UITBEST." in level.upper():
+                continue
+            key = make_key(
+                row.get("INSTELLINGSCODE", ""),
+                row.get("VESTIGINGSCODE", "") or row.get("VESTIGINGSNUMMER", ""),
+            )
+            if not key:
+                continue
+            school = schools.setdefault(key, fallback_vo_school(row, key))
+            count = sum_range(row, VO_PUPIL_COLUMNS)
+            bucket = grouped.setdefault(key, {}).setdefault(
+                year,
+                {
+                    "pupils": empty_count_range(),
+                    "total": empty_count_range(),
+                    "vwo": empty_count_range(),
+                    "havoVwo": empty_count_range(),
+                    "tracks": set(),
+                },
+            )
+            bucket["pupils"] = add_ranges(bucket["pupils"], count)
+            track = vo_track_label(level)
+            if track:
+                bucket["tracks"].add(track)
+            if is_vo_level_cohort(level):
+                bucket["total"] = add_ranges(bucket["total"], count)
+            if level.upper().startswith("VWO LJ"):
+                bucket["vwo"] = add_ranges(bucket["vwo"], count)
+            if level.upper().startswith("HAVO/VWO LJ"):
+                bucket["havoVwo"] = add_ranges(bucket["havoVwo"], count)
+
+    for key, by_year in grouped.items():
+        school = schools.get(key)
+        if not school:
+            continue
+        history = []
+        for year, values in sorted(by_year.items()):
+            eligible = add_ranges(values["vwo"], values["havoVwo"])
+            total = values["total"]
+            history.append(
+                {
+                    "year": year,
+                    "schoolYear": f"{year}-{year + 1}",
+                    "totalMin": total["min"],
+                    "totalMax": total["max"],
+                    "vwoMin": values["vwo"]["min"],
+                    "vwoMax": values["vwo"]["max"],
+                    "havoVwoMin": values["havoVwo"]["min"],
+                    "havoVwoMax": values["havoVwo"]["max"],
+                    "vwoEligibleMin": eligible["min"],
+                    "vwoEligibleMax": eligible["max"],
+                    "vwoRatioMin": ratio_min(values["vwo"], total),
+                    "vwoRatioMax": ratio_max(values["vwo"], total),
+                    "vwoEligibleRatioMin": ratio_min(eligible, total),
+                    "vwoEligibleRatioMax": ratio_max(eligible, total),
+                    "redacted": bool(total["redacted"] or eligible["redacted"] or values["vwo"]["redacted"]),
+                }
+            )
+
+        latest_year = max(by_year)
+        latest = by_year[latest_year]
+        eligible = add_ranges(latest["vwo"], latest["havoVwo"])
+        total = latest["total"]
+        school["pupils"] = {
+            "min": latest["pupils"]["min"],
+            "max": latest["pupils"]["max"],
+            "redacted": latest["pupils"]["redacted"],
+        }
+        school["enrollment"] = {
+            "year": latest_year,
+            "totalMin": total["min"],
+            "totalMax": total["max"],
+            "vwoMin": latest["vwo"]["min"],
+            "vwoMax": latest["vwo"]["max"],
+            "havoVwoMin": latest["havoVwo"]["min"],
+            "havoVwoMax": latest["havoVwo"]["max"],
+            "vwoEligibleMin": eligible["min"],
+            "vwoEligibleMax": eligible["max"],
+            "redacted": bool(total["redacted"] or eligible["redacted"] or latest["vwo"]["redacted"]),
+        }
+        school["tracks"] = sorted(latest["tracks"], key=vo_track_sort_key)
+        school.setdefault("history", {})["enrollment"] = history
+
+
+def merge_vo_origins(schools: dict[str, dict], rows: list[dict[str, str]], year: int) -> None:
+    grouped: dict[str, dict[str, dict]] = {}
+    for row in rows:
+        key = make_key(row.get("INSTELLINGSCODE", ""), row.get("VESTIGINGSNUMMER", ""))
+        if not key or schools.get(key, {}).get("sector") != "VO":
+            continue
+        raw_code = re.sub(r"\s+", "", row.get("POSTCODE LEERLING", ""))
+        place = tidy_name(row.get("PLAATSNAAM LEERLING"))
+        if not raw_code and not place:
+            continue
+        is_postcode4 = bool(re.fullmatch(r"[1-9]\d{3}", raw_code))
+        origin_key = raw_code if is_postcode4 else f"special:{raw_code or normalize_text(place)}"
+        label = raw_code if is_postcode4 else (title_or_empty(place) or raw_code or "Onbekend")
+        kind = "domestic" if is_postcode4 else ("foreign" if raw_code in {"10", "20", "30"} else "unknown")
+        parsed = sum_range(row, VO_ORIGIN_COLUMNS)
+        by_origin = grouped.setdefault(key, {})
+        current = by_origin.setdefault(
+            origin_key,
+            {"label": label, "postcode4": raw_code if is_postcode4 else None, "kind": kind, **empty_count_range()},
+        )
+        updated = add_ranges(current, parsed)
+        current.update(updated)
+
+    for key, by_origin in grouped.items():
+        school = schools.get(key)
+        if not school:
+            continue
+        total = add_many_ranges(by_origin.values())
+        local_postcode4 = normalize_postcode(school.get("postcode"))[:4]
+        local = by_origin.get(local_postcode4, empty_count_range())
+        domestic = add_many_ranges(values for values in by_origin.values() if values["kind"] == "domestic")
+        foreign = add_many_ranges(values for values in by_origin.values() if values["kind"] == "foreign")
+        known_residence = add_ranges(domestic, foreign)
+        top = sorted(
+            by_origin.values(),
+            key=lambda values: (int(values["min"]) + int(values["max"])) / 2,
+            reverse=True,
+        )[:5]
+        school["origin"] = {
+            "year": year,
+            "postcode4": local_postcode4 or None,
+            "totalMin": total["min"],
+            "totalMax": total["max"],
+            "localMin": local["min"],
+            "localMax": local["max"],
+            "localRatioMin": ratio_min(local, total),
+            "localRatioMax": ratio_max(local, total),
+            "redacted": total["redacted"],
+            "top": [
+                {
+                    "postcode4": values.get("postcode4"),
+                    "label": values["label"],
+                    "min": values["min"],
+                    "max": values["max"],
+                    "ratioMin": ratio_min(values, total),
+                    "ratioMax": ratio_max(values, total),
+                    "redacted": values["redacted"],
+                }
+                for values in top
+            ],
+        }
+        residence_history = {
+            "year": year,
+            "measure": "Woonland",
+            "categoryLabel": "Woonachtig in het buitenland",
+            "referenceLabel": "Nederlands woonadres",
+            "totalMin": known_residence["min"],
+            "totalMax": known_residence["max"],
+            "nncaMin": foreign["min"],
+            "nncaMax": foreign["max"],
+            "referenceMin": domestic["min"],
+            "referenceMax": domestic["max"],
+            "nncaRatioMin": ratio_min(foreign, known_residence),
+            "nncaRatioMax": ratio_max(foreign, known_residence),
+            "redacted": bool(known_residence["redacted"] or foreign["redacted"] or domestic["redacted"]),
+        }
+        school["background"] = {**residence_history, "history": [residence_history]}
+
+
+def fallback_vo_school(row: dict[str, str], key: str) -> dict:
+    inst, branch = key.split("-", 1)
+    return {
+        "id": key,
+        "brin": inst,
+        "branch": branch,
+        "name": tidy_name(row.get("INSTELLINGSNAAM VESTIGING")),
+        "city": row.get("PLAATSNAAM VESTIGING", "").strip(),
+        "municipality": "",
+        "province": title_or_empty(row.get("PROVINCIE VESTIGING")),
+        "postcode": "",
+        "type": "Vo",
+        "sector": "VO",
+        "educationStructure": None,
+        "tracks": [],
+        "denomination": "",
+        "address": "",
+        "phone": None,
+        "website": None,
+        "latitude": None,
+        "longitude": None,
+        "pupils": {"min": None, "max": None, "redacted": False},
+        "advice": empty_advice(),
+        "enrollment": empty_enrollment(),
+        "origin": empty_origin(),
+        "background": empty_background(),
+        "history": {"advice": [], "enrollment": []},
+        "satisfaction": empty_satisfaction(),
+    }
+
+
+def is_vo_level_cohort(level: str) -> bool:
+    upper = level.upper()
+    return upper.startswith(("PRAKTIJKONDERWIJS", "VMBO ", "HAVO LJ", "HAVO/VWO LJ", "VWO LJ"))
+
+
+def vo_track_label(level: str) -> str | None:
+    upper = level.upper()
+    if upper.startswith("PRAKTIJKONDERWIJS"):
+        return "PRO"
+    if upper.startswith("VMBO"):
+        return "VMBO"
+    if upper.startswith("HAVO/VWO"):
+        return "HAVO/VWO"
+    if upper.startswith("HAVO"):
+        return "HAVO"
+    if upper.startswith("VWO"):
+        return "VWO"
+    if upper.startswith(("ENGELSE STROOM", "EUROPEAN SECONDARY", "INT. BACCELAUREAAT")):
+        return "Internationaal"
+    if upper.startswith("BRUGJAAR"):
+        return "Brugjaar"
+    return None
+
+
+def vo_track_sort_key(track: str) -> tuple[int, str]:
+    order = {"PRO": 0, "VMBO": 1, "HAVO": 2, "HAVO/VWO": 3, "VWO": 4, "Brugjaar": 5, "Internationaal": 6}
+    return order.get(track, 99), track
+
+
 def fallback_school(row: dict[str, str], key: str) -> dict:
     inst, branch = key.split("-", 1)
     return {
@@ -636,6 +980,9 @@ def fallback_school(row: dict[str, str], key: str) -> dict:
         "province": title_or_empty(row.get("PROVINCIE")),
         "postcode": normalize_postcode(row.get("POSTCODE_VESTIGING")),
         "type": row.get("SOORT_PO", ""),
+        "sector": "PO",
+        "educationStructure": None,
+        "tracks": [],
         "denomination": title_or_empty(row.get("DENOMINATIE_VESTIGING")),
         "address": "",
         "phone": None,
@@ -644,9 +991,10 @@ def fallback_school(row: dict[str, str], key: str) -> dict:
         "longitude": None,
         "pupils": {"min": None, "max": None, "redacted": False},
         "advice": empty_advice(),
+        "enrollment": empty_enrollment(),
         "origin": empty_origin(),
         "background": empty_background(),
-        "history": {"advice": []},
+        "history": {"advice": [], "enrollment": []},
         "satisfaction": empty_satisfaction(),
     }
 
@@ -663,6 +1011,25 @@ def empty_advice() -> dict:
         "vwoEligibleMax": None,
         "redacted": False,
     }
+
+
+def empty_enrollment() -> dict:
+    return {
+        "year": None,
+        "totalMin": None,
+        "totalMax": None,
+        "vwoMin": None,
+        "vwoMax": None,
+        "havoVwoMin": None,
+        "havoVwoMax": None,
+        "vwoEligibleMin": None,
+        "vwoEligibleMax": None,
+        "redacted": False,
+    }
+
+
+def empty_count_range() -> dict[str, int | bool]:
+    return {"min": 0, "max": 0, "redacted": False}
 
 
 def empty_origin() -> dict:
@@ -802,6 +1169,8 @@ def branch_code(inst: str, branch: str) -> str:
     branch = (branch or "").strip().upper()
     if inst and branch.startswith(inst):
         branch = branch[len(inst) :]
+    if branch.isdigit() and len(branch) < 2:
+        branch = branch.zfill(2)
     return branch or "00"
 
 

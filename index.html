@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Schoolradar VWO</title>
+    <title>Schoolradar Nederland</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./styles.css?v=20260921-vo-level">
   </head>
   <body>
     <header class="topbar">
@@ -16,7 +16,7 @@
           <span></span>
         </div>
         <div>
-          <h1>Schoolradar VWO</h1>
+          <h1>Schoolradar Nederland</h1>
           <p>DUO Open Onderwijsdata</p>
         </div>
       </div>
@@ -36,22 +36,38 @@
             <option value="5">5 km</option>
             <option value="10">10 km</option>
             <option value="20">20 km</option>
+            <option value="30">30 km</option>
+            <option value="40">40 km</option>
+            <option value="50">50 km</option>
+            <option value="65">65 km</option>
           </select>
         </label>
 
         <label>
           <span>Type</span>
           <select id="typeSelect" name="type">
-            <option value="all">BO + SBO</option>
+            <option value="all">Alle scholen</option>
+            <option value="primary">BO + SBO</option>
             <option value="Bo">BO</option>
             <option value="Sbo">SBO</option>
+            <option value="Vo">VO (middelbaar)</option>
+          </select>
+        </label>
+
+        <label id="voLevelField" class="is-disabled">
+          <span>VO-niveau</span>
+          <select id="voLevelSelect" name="level" disabled>
+            <option value="all">Alle niveaus</option>
+            <option value="VMBO">VMBO</option>
+            <option value="HAVO">HAVO</option>
+            <option value="VWO">VWO</option>
           </select>
         </label>
 
         <label>
           <span>Sorteren</span>
           <select id="sortSelect" name="sort">
-            <option value="vwo" selected>VWO-ratio</option>
+            <option value="vwo" selected>VWO-aandeel</option>
             <option value="distance">Afstand</option>
             <option value="international">Internationaal</option>
             <option value="satisfaction">Tevredenheid</option>
@@ -109,7 +125,7 @@
               <span class="legend-dot low"></span>
               <span>lager</span>
               <span class="legend-line"></span>
-              <span>VWO-ratio</span>
+              <span>VWO-aandeel</span>
               <span class="legend-dot high"></span>
               <span>hoger</span>
             </div>
@@ -119,14 +135,14 @@
             <div class="visual-head">
               <div>
                 <h2>Verdeling</h2>
-                <p>VWO-ratio per locatie</p>
+                <p>VWO-aandeel per locatie</p>
               </div>
             </div>
             <div id="distributionMap" class="real-map distribution-map"></div>
             <canvas id="scatterCanvas" class="chart-fallback"></canvas>
             <div class="distribution-note">
-              <span><i class="legend-line"></i>kleur = VWO-ratio, oranje lager tot groen hoger</span>
-              <span><i class="size-dot"></i>grootte = aantal leerlingen in het adviescohort</span>
+              <span><i class="legend-line"></i>kleur = VWO-aandeel, oranje lager tot groen hoger</span>
+              <span><i class="size-dot"></i>grootte = aantal leerlingen in de meetgroep</span>
               <span><i class="legend-dot high"></i>elke stip = een school</span>
             </div>
           </article>
@@ -142,6 +158,6 @@
     </main>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="./app.js"></script>
+    <script src="./app.js?v=20260921-validated"></script>
   </body>
 </html>

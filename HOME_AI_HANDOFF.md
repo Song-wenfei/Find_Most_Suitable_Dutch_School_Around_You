@@ -1,20 +1,21 @@
-# Home AI Handoff: Schoolradar VWO
+# Home AI Handoff: Schoolradar Nederland
 
 Use this document to continue the project in another AI environment.
 
 ## Project Objective
 
-Build and publish a public website for finding Dutch primary schools around a postcode/place, using DUO Open Onderwijsdata.
+Build and publish a public website for finding Dutch primary and secondary schools around a postcode/place, using DUO Open Onderwijsdata.
 
-The main ranking metric is the share of pupils receiving VWO final advice. The site also shows:
+The primary-school ranking metric is the share of pupils receiving VWO final advice. Secondary schools use the share of pupils enrolled in VWO among pupils with a defined secondary level. The site also shows:
 
-- schools within a selected radius
-- BO/SBO filtering
+- schools within a selected radius of up to 65 km
+- all-school, BO/SBO, BO, SBO, and VO filtering
+- a separate VO programme filter for VMBO, HAVO, and VWO, combinable with radius and distance sorting
 - VWO ratio ranking, distance ranking, international/background ranking, and placeholder satisfaction ranking
 - map and distribution map
-- 5-year VWO advice history
+- 5-year VWO advice or enrollment history
 - student origin by postcode4
-- DUO background indicators: NNCA/NOAT/CUMI
+- DUO background indicators for PO and foreign-residence share for VO
 
 ## Local Project Path
 
@@ -32,7 +33,7 @@ The `github-upload` folder contains only small source files and is intended for 
 
 ## Last Local Refresh
 
-The local DUO dataset was refreshed on 2026-09-07.
+The local DUO dataset was refreshed on 2026-09-21.
 
 Generated file:
 
@@ -42,12 +43,16 @@ data/schools.json
 
 Current generated-data stats:
 
-- schools: 6,452
+- schools: 8,138
+- primary locations: 6,452
+- secondary locations: 1,686
 - schools with advice ratio data: 6,323
+- secondary locations with enrollment ratio data: 1,391
+- secondary locations with a full 5-year enrollment history: 1,354
 - schools with 5-year advice history: 6,341
-- schools with origin postcode4 data: 6,357
-- schools with background ratio data: 6,385
-- schools with coordinates: 5,986
+- schools with origin postcode4 data: 7,810
+- schools with background/residence ratio data: 7,838
+- schools with coordinates: 7,564
 
 National BO strict-VWO sanity check after refresh:
 
@@ -81,7 +86,7 @@ data/raw/
 .edge-profile/
 ```
 
-`data/schools.json` is about 26 MB and exceeds GitHub web upload limits. It must be generated during GitHub Actions deployment.
+`data/schools.json` exceeds GitHub web upload limits. It must be generated during GitHub Actions deployment.
 
 Upload only:
 
@@ -138,6 +143,9 @@ The data builder uses official DUO sources:
 - DUO pupil origin by postcode4
 - DUO 5-year advice history
 - DUO background data
+- DUO VO addresses
+- DUO VO pupils by level for 2021-2025
+- DUO VO pupil origin by postcode for 2025
 
 Main builder:
 
@@ -167,13 +175,21 @@ Optional broader metric:
 (VWO + HAVO_VWO) / all definite final advice categories
 ```
 
+For secondary schools, the default metric is:
+
+```text
+VWO pupils / pupils in PRO, vmbo, havo, HAVO/VWO, or vwo
+```
+
+The optional broader VO metric adds pupils in the mixed `HAVO/VWO lj 3` category. Bridge classes and pupils outsourced to VAVO are excluded from the denominator. The PO advice ratio and VO enrollment ratio are different measures and must be labeled separately.
+
 Important:
 
 - `ADVIES_NIET_MOGELIJK` must be excluded from the denominator.
 - DUO privacy values `<5` and API `-1` are treated as range `1-4`.
 - The UI must show a range when exact values are privacy-masked.
 - VWO sorting uses the lower bound first, then midpoint as tie-breaker.
-- International sorting uses the lower bound of DUO NNCA/background percentage first, then midpoint and VWO as tie-breakers.
+- International sorting uses the lower bound first, then midpoint and VWO as tie-breakers. PO uses the DUO NNCA/background indicator; VO uses foreign residence categories (Belgium, Germany, other foreign country), excluding unknown addresses.
 - Do not present masked data as exact percentages.
 
 Example:
@@ -211,15 +227,15 @@ Current intended UI behavior:
 
 - strict VWO is default
 - HAVO/VWO is optional via checkbox
-- sort options include VWO-ratio, distance, international, and satisfaction
-- international sort uses DUO NNCA/NOAT/CUMI background ratio; it is not exact nationality
-- cards show `VWO count / advice cohort`
+- sort options include VWO share, distance, international, and satisfaction
+- international sort is not exact nationality: PO uses DUO NNCA/NOAT/CUMI, while VO uses foreign residence
+- cards show `VWO count / advice cohort` for PO and `VWO pupils / known-level cohort` for VO
 - uncertainty chip: `breed DUO-bereik`
 - detail panel shows the calculation line
 - map uses Leaflet/OpenStreetMap, not Google Maps
 - distribution map explanation:
   - color = VWO ratio, orange lower to green higher
-  - size = number of pupils in the advice cohort
+  - size = number of pupils in the relevant measurement cohort
   - each dot = one school
 
 ## Local Run
@@ -239,7 +255,13 @@ http://localhost:4173/
 Example query:
 
 ```text
-http://localhost:4173/?q=3992&radius=2.5&type=Bo&sort=vwo
+http://localhost:4173/?q=3992&radius=20&type=Vo&sort=vwo
+```
+
+Run the complete source, workflow, generated-data, and upload-mirror validation with:
+
+```powershell
+python .\tools\validate_project.py
 ```
 
 ## Build Data Locally

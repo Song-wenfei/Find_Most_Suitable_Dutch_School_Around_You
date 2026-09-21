@@ -120,7 +120,7 @@ select {
 
 .controls {
   display: grid;
-  grid-template-columns: minmax(210px, 1.8fr) repeat(3, minmax(112px, 0.7fr)) auto;
+  grid-template-columns: minmax(190px, 1.7fr) minmax(105px, 0.65fr) minmax(175px, 0.85fr) minmax(110px, 0.7fr) minmax(145px, 0.85fr);
   gap: 10px;
   align-items: end;
 }
@@ -157,6 +157,15 @@ select {
   padding: 0 32px 0 11px;
 }
 
+.controls label.is-disabled {
+  opacity: 0.55;
+}
+
+.controls select:disabled {
+  cursor: not-allowed;
+  background: #eef1ee;
+}
+
 .controls input:focus,
 .controls select:focus {
   border-color: var(--accent);
@@ -165,6 +174,7 @@ select {
 
 .toggle {
   display: flex;
+  grid-column: 1 / -1;
   align-items: center;
   justify-content: flex-start;
   min-height: 42px;
@@ -174,6 +184,7 @@ select {
   border-radius: var(--radius);
   background: var(--surface);
   white-space: nowrap;
+  width: max-content;
 }
 
 .toggle input {
